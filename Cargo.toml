@@ -1,0 +1,27 @@
+[package]
+name = "parseltongue"
+version = "0.1.0-alpha.1"
+authors = ["Dr Maxim Orlovsky <orlovsky@ubideco.org>"]
+description = "Framework for declarative domain-specific languages"
+repository = "https://github.com/UBIDECO/parseltongue"
+homepage = "https://ubideco.org/ParselTongue"
+keywords = ["language", "declarative", "syntax", "parser"]
+categories = ["parser-implementations"]
+readme = "README.md"
+license = "Apache-2.0"
+edition = "2021"
+rust-version = "1.77.0" # Due to `rustfix`
+exclude = [".github"]
+
+[lib]
+name = "parseltongue"
+
+[dependencies]
+amplify = "~4.8.0"
+
+[features]
+default = []
+all = []
+
+[package.metadata.docs.rs]
+features = ["all"]
