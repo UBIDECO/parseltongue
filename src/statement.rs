@@ -20,12 +20,19 @@
 // or implied. See the License for the specific language governing permissions and limitations under
 // the License.
 
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#[derive(Clone, Debug, Default)]
+pub struct Module<'s>(pub Vec<Statement<'s>>);
 
-#[macro_use]
-extern crate amplify;
+#[derive(Clone, Debug)]
+pub enum Statement<'s> {
+    Decl(Decl<'s>),
+    Expr(&'s str),
+}
 
-mod statement;
-mod parse;
-
-pub use statement::{Decl, Module, Statement};
+#[derive(Clone, Debug)]
+pub struct Decl<'s> {
+    pub decl: &'s str,
+    pub name: &'s str,
+    pub params: Vec<&'s str>,
+    pub body: Vec<Statement<'s>>,
+}

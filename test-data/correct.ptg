@@ -1,0 +1,19 @@
+
+{- Some multi-line comment
+  with {- nested comments -}
+  even {- multiline
+   nested {- many times
+   -}
+  "-} including quoted
+-}
+
+decl name: some [
+  (brackets many-level { nested }
+    "and quoted '"
+  )
+]
+
+```back-quoted part
+ with unclosed brackets {
+ and wrong quotes "
+```
