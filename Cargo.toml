@@ -10,7 +10,7 @@ categories = ["parser-implementations", "no-std"]
 readme = "README.md"
 license = "Apache-2.0"
 edition = "2021"
-rust-version = "1.77.0" # Due to `rustfix`
+rust-version = "1.65.0"
 exclude = [".github"]
 
 [lib]

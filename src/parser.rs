@@ -24,7 +24,6 @@
 use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-use core::error::Error;
 use core::fmt::{self, Debug, Display, Formatter};
 use core::str::Lines;
 
@@ -456,7 +455,10 @@ impl Display for ParseError {
     }
 }
 
-impl Error for ParseError {}
+// TODO: Activate once MSRV >= 1.81
+// impl core::error::Error for ParseError {}
+#[cfg(feature = "std")]
+impl std::error::Error for ParseError {}
 
 impl From<BlockStart> for ParseError {
     fn from(block: BlockStart) -> Self {
