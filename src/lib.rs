@@ -26,6 +26,6 @@
 extern crate amplify;
 
 mod statement;
-mod parse;
+mod parser;
 
 pub use statement::{Decl, Module, Statement};
