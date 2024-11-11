@@ -678,39 +678,45 @@ mod test {
         let src = ParsedSource::parse(CODE).unwrap();
 
         assert_eq!(
-            src.get(0).unwrap(),
+            src.get(0)
+                .map(|(ty, code)| (ty, code.replace('\r', "")))
+                .unwrap(),
             (
                 BlockTy::Comment,
-                r#"{- Some multi-line comment
+                s!(r#"{- Some multi-line comment
   with {- nested comments -}
   even {- multiline
    nested {- many times
    -}
   "-} including quoted
--}"#
+-}"#)
             )
         );
 
         assert_eq!(
-            src.get(1).unwrap(),
+            src.get(1)
+                .map(|(ty, code)| (ty, code.replace('\r', "")))
+                .unwrap(),
             (
                 BlockTy::Code,
-                r#"decl name: some [
+                s!(r#"decl name: some [
   (brackets many-level { nested }
     "and quoted '"
   )
-]"#
+]"#)
             )
         );
 
         assert_eq!(
-            src.get(2).unwrap(),
+            src.get(2)
+                .map(|(ty, code)| (ty, code.replace('\r', "")))
+                .unwrap(),
             (
                 BlockTy::Quotes(Quotes::TripleBack),
-                r#"```back-quoted part
+                s!(r#"```back-quoted part
  with unclosed brackets {
  and wrong quotes "
-```"#
+```"#)
             )
         );
     }
