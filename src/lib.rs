@@ -25,9 +25,7 @@
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
-
-#[macro_use]
-extern crate amplify;
+extern crate core;
 
 mod statement;
 mod parser;

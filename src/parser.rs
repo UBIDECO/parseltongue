@@ -24,6 +24,7 @@
 use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::error::Error;
 use core::fmt::{self, Debug, Display, Formatter};
 use core::str::Lines;
 
@@ -46,14 +47,21 @@ impl From<(usize, usize)> for Loc {
     fn from((line, col): (usize, usize)) -> Self { Loc { line, col } }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Display)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Brackets {
-    #[display("parenthesis")]
     Round,
-    #[display("square brackets")]
     Square,
-    #[display("braces")]
     Curvy,
+}
+
+impl Display for Brackets {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Brackets::Round => f.write_str("parenthesis"),
+            Brackets::Square => f.write_str("square brackets"),
+            Brackets::Curvy => f.write_str("braces"),
+        }
+    }
 }
 
 impl Brackets {
@@ -105,18 +113,25 @@ impl Brackets {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Display)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Quotes {
-    #[display("single quotes")]
     Single,
-    #[display("double quotes")]
     Double,
-    #[display("triple quotes")]
     TripleDouble,
-    #[display("backquotes")]
     Back,
-    #[display("triple backquotes")]
     TripleBack,
+}
+
+impl Display for Quotes {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Quotes::Single => f.write_str("single quotes"),
+            Quotes::Double => f.write_str("double quotes"),
+            Quotes::TripleDouble => f.write_str("triple quotes"),
+            Quotes::Back => f.write_str("backquotes"),
+            Quotes::TripleBack => f.write_str("triple backquotes"),
+        }
+    }
 }
 
 impl Quotes {
@@ -163,16 +178,23 @@ impl Quotes {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Display)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BlockTy {
-    #[display("code block")]
     Code,
-    #[display("{0} block")]
     Brackets(Brackets),
-    #[display("{0} block")]
     Quotes(Quotes),
-    #[display("multiline comment block")]
     Comment,
+}
+
+impl Display for BlockTy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            BlockTy::Code => f.write_str("code block"),
+            BlockTy::Brackets(brackets) => write!(f, "{brackets} block"),
+            BlockTy::Quotes(quotes) => write!(f, "{quotes} block"),
+            BlockTy::Comment => f.write_str("multiline comment block"),
+        }
+    }
 }
 
 impl BlockTy {
@@ -190,11 +212,16 @@ impl BlockTy {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Display)]
-#[display("{ty} defined in {begin}")]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct BlockStart {
     pub ty: BlockTy,
     pub begin: Loc,
+}
+
+impl Display for BlockStart {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} defined in {}", self.ty, self.begin)
+    }
 }
 
 impl BlockStart {
@@ -402,22 +429,34 @@ impl<'src> Parser<'src> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Display)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ParseError {
-    #[display("mismatched {2} at {1} when {0} was expected")]
     MismatchedBrackets(BlockStart, Loc, Brackets),
-    #[display("unexpected end of comment")]
     UnmatchedComment(Loc),
-    #[display("closing {1} in {0} without opening them first")]
     UnmatchedBrackets(Loc, Brackets),
-
-    #[display("{0} is not closed")]
     UnclosedBrackets(BlockStart),
-    #[display("multiline comment block is not closed")]
     UnclosedComment(BlockStart),
-    #[display("{0} is not closed")]
     UnclosedQuotes(BlockStart),
 }
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseError::MismatchedBrackets(block, _, brackets) => {
+                write!(f, "mismatched {brackets} when {} closing was expected", block.ty)
+            }
+            ParseError::UnmatchedComment(_) => write!(f, "unexpected end of comment"),
+            ParseError::UnmatchedBrackets(_, brackets) => {
+                write!(f, "closing {brackets} without opening them first")
+            }
+            ParseError::UnclosedBrackets(block) => write!(f, "{block} is not closed"),
+            ParseError::UnclosedComment(_) => write!(f, "multiline comment block is not closed"),
+            ParseError::UnclosedQuotes(block) => write!(f, "{block} is not closed"),
+        }
+    }
+}
+
+impl Error for ParseError {}
 
 impl From<BlockStart> for ParseError {
     fn from(block: BlockStart) -> Self {
@@ -687,13 +726,14 @@ mod test {
                 .unwrap(),
             (
                 BlockTy::Comment,
-                s!(r#"{- Some multi-line comment
+                r#"{- Some multi-line comment
   with {- nested comments -}
   even {- multiline
    nested {- many times
    -}
   "-} including quoted
--}"#)
+-}"#
+                .to_owned()
             )
         );
 
@@ -703,11 +743,12 @@ mod test {
                 .unwrap(),
             (
                 BlockTy::Code,
-                s!(r#"decl name: some [
+                r#"decl name: some [
   (brackets many-level { nested }
     "and quoted '"
   )
-]"#)
+]"#
+                .to_owned()
             )
         );
 
@@ -717,10 +758,11 @@ mod test {
                 .unwrap(),
             (
                 BlockTy::Quotes(Quotes::TripleBack),
-                s!(r#"```back-quoted part
+                r#"```back-quoted part
  with unclosed brackets {
  and wrong quotes "
-```"#)
+```"#
+                    .to_owned()
             )
         );
     }

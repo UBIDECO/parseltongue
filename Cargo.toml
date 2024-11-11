@@ -17,7 +17,6 @@ exclude = [".github"]
 name = "parseltongue"
 
 [dependencies]
-amplify = "~4.8.0"
 
 [features]
 default = ["std"]
