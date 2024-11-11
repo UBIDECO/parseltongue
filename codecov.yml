@@ -4,3 +4,4 @@ codecov:
 coverage:
   precision: 1
   round: nearest
+  range: 66..75
