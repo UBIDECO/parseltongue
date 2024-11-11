@@ -275,10 +275,13 @@ impl<'src> Parser<'src> {
         let block = quotes.start(self.curr_loc);
         self.shift_col(quotes.len());
         loop {
-            // TODO: ignore if backslash is used
             if let Some(col_end) = self.curr_line.find(quotes.quotes_str()) {
+                let line = self.curr_line;
                 self.shift_col(col_end);
-                return Ok(self.end(block));
+                // Ignore if backslash is used
+                if col_end == 0 || line.as_bytes()[col_end - 1] != b'\\' {
+                    return Ok(self.end(block));
+                }
             }
             self.shift_or_fail(block)?;
         }
@@ -593,6 +596,48 @@ mod test {
             "{- first {- first nested -} comment -} {-{-second nested-} second comment -}",
             [BlockTy::Comment, BlockTy::Comment],
             ["{- first {- first nested -} comment -}", "{-{-second nested-} second comment -}"],
+        );
+    }
+
+    #[test]
+    fn quotes() {
+        test_block(r#""double-quoted string""#, BlockTy::Quotes(Quotes::Double));
+        test_block(r#"'single-quoted string'"#, BlockTy::Quotes(Quotes::Single));
+        test_block(r#"`backquoted string`"#, BlockTy::Quotes(Quotes::Back));
+        test_block(r#"```tripple-backquoted string```"#, BlockTy::Quotes(Quotes::TripleBack));
+        test_block(r#""""tripple-quoted string""""#, BlockTy::Quotes(Quotes::TripleDouble));
+    }
+
+    #[test]
+    fn mixed_quotes() {
+        test_block(r#""double-quoted ' ` string""#, BlockTy::Quotes(Quotes::Double));
+        test_block(r#"'single-quoted " ` string'"#, BlockTy::Quotes(Quotes::Single));
+        test_block(r#"`backquoted " ' string`"#, BlockTy::Quotes(Quotes::Back));
+        test_block(r#"```tripple-backquoted " ' ` string```"#, BlockTy::Quotes(Quotes::TripleBack));
+        test_block(r#""""tripple-quoted " ' ` string""""#, BlockTy::Quotes(Quotes::TripleDouble));
+    }
+
+    #[test]
+    fn multiline_quotes() {
+        test_block(r#""double-quoted\n string""#, BlockTy::Quotes(Quotes::Double));
+        test_block(r#"'single-quoted\n string'"#, BlockTy::Quotes(Quotes::Single));
+        test_block(r#"`backquoted\n string`"#, BlockTy::Quotes(Quotes::Back));
+        test_block(r#"```tripple-backquoted\n string```"#, BlockTy::Quotes(Quotes::TripleBack));
+        test_block(r#""""tripple-quoted\n string""""#, BlockTy::Quotes(Quotes::TripleDouble));
+    }
+
+    #[test]
+    fn backslashed_quote() {
+        test_block(r#" "quoted string \" with backslash" "#, BlockTy::Quotes(Quotes::Double));
+        test_block(r#" 'quoted string \' with backslash' "#, BlockTy::Quotes(Quotes::Single));
+        test_block(r#" `quoted string \` with backslash` "#, BlockTy::Quotes(Quotes::Back));
+        test_block(
+            r#" ```tripple-backquoted string \``` with backslash``` "#,
+            BlockTy::Quotes(Quotes::TripleBack),
+        );
+        test_block(
+            r#" """tripple-quoted string \""" with backslash""" "#,
+            BlockTy::Quotes(Quotes::TripleDouble),
         );
     }
 
