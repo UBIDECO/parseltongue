@@ -275,6 +275,7 @@ impl<'src> Parser<'src> {
         let block = quotes.start(self.curr_loc);
         self.shift_col(quotes.len());
         loop {
+            // TODO: ignore if backslash is used
             if let Some(col_end) = self.curr_line.find(quotes.quotes_str()) {
                 self.shift_col(col_end);
                 return Ok(self.end(block));
@@ -289,22 +290,30 @@ impl<'src> Parser<'src> {
         self.shift_col(1);
         loop {
             if let Some(closing_bracket) = Brackets::detect_closing(self.curr_line) {
-                if closing_bracket != brackets {
-                    return Err(ParseError::MismatchedBrackets(
-                        block,
-                        self.curr_loc,
-                        closing_bracket,
-                    ));
+                return if closing_bracket != brackets {
+                    Err(ParseError::MismatchedBrackets(block, self.curr_loc, closing_bracket))
                 } else {
-                    return Ok(self.end(block));
-                }
+                    Ok(self.end(block))
+                };
             }
+            self.parse_std_block()?;
             self.shift_or_fail(block)?;
-            self.parse_custom_block()?;
         }
     }
 
-    pub fn parse_custom_block(&mut self) -> Result<Option<Block>, ParseError> {
+    pub fn parse_default(&mut self) -> Result<Block, ParseError> {
+        let block = BlockTy::Code.start(self.curr_loc);
+        self.shift_col(1);
+        loop {
+            self.parse_std_block()?;
+            if self.curr_line.is_empty() {
+                return Ok(self.end(block));
+            }
+            self.shift_col(1);
+        }
+    }
+
+    pub fn parse_std_block(&mut self) -> Result<Option<Block>, ParseError> {
         let block = if self.curr_line.starts_with(OPENING_MULTILINE_COMMENT) {
             self.parse_comments()?
         } else if self.curr_line.starts_with(CLOSING_MULTILINE_COMMENT) {
@@ -313,6 +322,8 @@ impl<'src> Parser<'src> {
             self.parse_quotes(quotes)?
         } else if let Some(brackets) = Brackets::detect_opening(self.curr_line) {
             self.parse_brackets(brackets)?
+        } else if let Some(closing_bracket) = Brackets::detect_closing(self.curr_line) {
+            return Err(ParseError::UnmatchedBrackets(self.curr_loc, closing_bracket));
         } else {
             return Ok(None);
         };
@@ -322,23 +333,14 @@ impl<'src> Parser<'src> {
     fn parse_blocks(&mut self) -> Result<Vec<Block>, ParseError> {
         let mut blocks = vec![];
         while self.skip_whitespace().is_some() {
-            if let Some(block) = self.parse_custom_block()? {
+            if let Some(block) = self.parse_std_block()? {
                 blocks.push(block);
-            } else if let Some(closing_bracket) = Brackets::detect_closing(self.curr_line) {
-                return Err(ParseError::UnmatchedBrackets(self.curr_loc, closing_bracket));
             } else {
-                let end = self.curr_loc.col + self.curr_line.len();
-                let block = BlockTy::Code
-                    .start(self.curr_loc)
-                    .end(self.curr_loc.line, end);
+                let block = self.parse_default()?;
                 blocks.push(block);
-
-                let Some(next_line) = self.lines.next() else {
+                if self.shift_line().is_none() {
                     return Ok(blocks);
-                };
-                self.curr_line = next_line;
-                self.curr_loc.line += 1;
-                self.curr_loc.col = 0;
+                }
             }
         }
         Ok(blocks)
@@ -613,25 +615,26 @@ mod test {
             )
         );
 
-        assert_eq!(src.get(1).unwrap(), (BlockTy::Code, r#"decl name: some"#));
-
         assert_eq!(
-            src.get(2).unwrap(),
+            src.get(1).unwrap(),
             (
-                BlockTy::Brackets(Brackets::Square),
-                r#"(brackets many-level { nested }
-    "and quited '"
-  )"#
+                BlockTy::Code,
+                r#"decl name: some [
+  (brackets many-level { nested }
+    "and quoted '"
+  )
+]"#
             )
         );
 
         assert_eq!(
-            src.get(3).unwrap(),
+            src.get(2).unwrap(),
             (
                 BlockTy::Quotes(Quotes::TripleBack),
-                r#"back-quoted part
+                r#"```back-quoted part
  with unclosed brackets {
- and wrong quotes ""#
+ and wrong quotes "
+```"#
             )
         );
     }
