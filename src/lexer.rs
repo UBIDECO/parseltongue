@@ -27,7 +27,9 @@ use alloc::vec::Vec;
 use core::fmt::{self, Debug, Display, Formatter};
 use core::str::Lines;
 
-use crate::{Brackets, Loc, Quotes, CLOSING_MULTILINE_COMMENT, OPENING_MULTILINE_COMMENT};
+use crate::{
+    Brackets, Loc, Quotes, Source, Span, CLOSING_MULTILINE_COMMENT, OPENING_MULTILINE_COMMENT,
+};
 
 impl Brackets {
     pub fn start(self, loc: impl Into<Loc>) -> LexStart {
@@ -63,7 +65,7 @@ impl Display for LexTy {
 impl LexTy {
     pub fn start(self, loc: impl Into<Loc>) -> LexStart { LexStart { ty: self, begin: loc.into() } }
 
-    pub fn len(&self) -> usize {
+    pub fn delim_len(&self) -> usize {
         match self {
             LexTy::Code => 0,
             LexTy::Brackets(_) => 1,
@@ -87,22 +89,19 @@ impl Display for LexStart {
 
 impl LexStart {
     pub const fn end(self, line: usize, col: usize) -> Lexeme {
-        Lexeme { ty: self.ty, begin: self.begin, end: Loc { line, col } }
+        Lexeme { ty: self.ty, span: self.begin.span(Loc { line, col }) }
     }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Lexeme {
     pub ty: LexTy,
-    // TODO: Consider replacing with Range
-    pub begin: Loc,
-    pub end: Loc,
+    pub span: Span,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Lexemes<'src> {
-    pub source: &'src str,
-    pub lines: Vec<&'src str>,
+    pub source: Source<'src>,
     pub blocks: Vec<Lexeme>,
 }
 
@@ -243,7 +242,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn end(&mut self, block: LexStart) -> Lexeme {
-        self.shift_col(block.ty.len());
+        self.shift_col(block.ty.delim_len());
         block.end(self.curr_loc.line, self.curr_loc.col)
     }
 

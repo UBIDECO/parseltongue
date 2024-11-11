@@ -25,22 +25,6 @@ use core::fmt::{self, Debug, Display, Formatter};
 pub const OPENING_MULTILINE_COMMENT: &str = "{-";
 pub const CLOSING_MULTILINE_COMMENT: &str = "-}";
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Default)]
-pub struct Loc {
-    pub line: usize,
-    pub col: usize,
-}
-
-impl Display for Loc {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.line + 1, self.col + 1)
-    }
-}
-
-impl From<(usize, usize)> for Loc {
-    fn from((line, col): (usize, usize)) -> Self { Loc { line, col } }
-}
-
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Brackets {
     Round,

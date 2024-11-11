@@ -27,10 +27,12 @@
 extern crate alloc;
 extern crate core;
 
-mod statement;
-mod lexer;
 mod util;
+mod cursor;
+//mod lexer;
+//mod parser;
 
-pub use lexer::{Lexeme, Lexemes, Lexer, LexerError, UnparsedSource};
-pub use statement::{Decl, Module, Statement};
-pub use util::{Brackets, Loc, Quotes, CLOSING_MULTILINE_COMMENT, OPENING_MULTILINE_COMMENT};
+//pub use lexer::{Lexeme, Lexemes, Lexer, LexerError, UnparsedSource};
+//pub use parser::{Decl, Module, Statement};
+pub use cursor::{Cursor, Loc, Source, Span};
+pub use util::{Brackets, Quotes, CLOSING_MULTILINE_COMMENT, OPENING_MULTILINE_COMMENT};

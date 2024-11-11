@@ -23,19 +23,23 @@
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
-#[derive(Clone, Debug, Default)]
-pub struct Module<'s>(pub Vec<Statement<'s>>);
-
-#[derive(Clone, Debug)]
-pub enum Statement<'s> {
-    Decl(Decl<'s>),
-    Expr(&'s str),
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct Module<'src> {
+    pub source: &'src str,
+    pub lines: Vec<&'src str>,
+    pub decls: Vec<Decl<'src>>,
 }
 
-#[derive(Clone, Debug)]
-pub struct Decl<'s> {
-    pub decl: &'s str,
-    pub name: &'s str,
-    pub params: Vec<&'s str>,
-    pub body: Vec<Statement<'s>>,
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum Statement<'src> {
+    Decl(Decl<'src>),
+    Expr(&'src str),
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Decl<'src> {
+    pub decl: &'src str,
+    pub name: &'src str,
+    pub params: Vec<&'src str>,
+    pub body: Vec<Statement<'src>>,
 }
