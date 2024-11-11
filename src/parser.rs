@@ -187,7 +187,7 @@ impl BlockTy {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Display)]
-#[display("{ty} was defined in {begin}")]
+#[display("{ty} defined in {begin}")]
 pub struct BlockStart {
     pub ty: BlockTy,
     pub begin: Loc,
@@ -299,8 +299,9 @@ impl<'src> Parser<'src> {
                     Ok(self.end(block))
                 };
             }
-            self.parse_std_block()?;
-            self.shift_or_fail(block)?;
+            if self.parse_std_block()?.is_none() {
+                self.shift_or_fail(block)?;
+            }
         }
     }
 
@@ -308,11 +309,11 @@ impl<'src> Parser<'src> {
         let block = BlockTy::Code.start(self.curr_loc);
         self.shift_col(1);
         loop {
-            self.parse_std_block()?;
-            if self.curr_line.is_empty() {
+            if self.parse_std_block()?.is_none() {
+                self.shift_col(1);
+            } else if self.curr_line.is_empty() {
                 return Ok(self.end(block));
             }
-            self.shift_col(1);
         }
     }
 
@@ -514,8 +515,9 @@ impl<'s> Debug for UnparsedSource<'s> {
             writeln!(f, "       |{: >pos$} ^", "", pos = start.begin.col)?;
             writeln!(
                 f,
-                "       |{: >pos$} the block was originally defined here",
+                "       |{: >pos$} the {} block was originally defined here",
                 "",
+                start.ty,
                 pos = start.begin.col
             )?;
         }
@@ -639,6 +641,35 @@ mod test {
             r#" """tripple-quoted string \""" with backslash""" "#,
             BlockTy::Quotes(Quotes::TripleDouble),
         );
+    }
+
+    #[test]
+    fn brackets_empty() {
+        test_block("()", BlockTy::Brackets(Brackets::Round));
+        test_block("[]", BlockTy::Brackets(Brackets::Square));
+        test_block("\t{\t}\t", BlockTy::Brackets(Brackets::Curvy));
+    }
+
+    #[test]
+    fn brackets() {
+        test_block("( round brackets )", BlockTy::Brackets(Brackets::Round));
+        test_block("[square brackets]", BlockTy::Brackets(Brackets::Square));
+        test_block("\t{curly brackets\t}\t", BlockTy::Brackets(Brackets::Curvy));
+    }
+
+    #[test]
+    fn multiline_brackets() {
+        test_block("( round \n brackets )", BlockTy::Brackets(Brackets::Round));
+        test_block("[square\nbrackets]", BlockTy::Brackets(Brackets::Square));
+        test_block("\n{curly\nbrackets\n}\t", BlockTy::Brackets(Brackets::Curvy));
+    }
+
+    #[test]
+    fn nested_brackets() {
+        test_block("(round [square inner] brackets)", BlockTy::Brackets(Brackets::Round));
+        test_block("(round [square with {} postfix] brackets)", BlockTy::Brackets(Brackets::Round));
+        test_block("(round [square with {}] brackets)", BlockTy::Brackets(Brackets::Round));
+        test_block("[square () [{}, (())] brackets]", BlockTy::Brackets(Brackets::Square));
     }
 
     #[test]
