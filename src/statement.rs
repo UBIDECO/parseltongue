@@ -20,6 +20,9 @@
 // or implied. See the License for the specific language governing permissions and limitations under
 // the License.
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 #[derive(Clone, Debug, Default)]
 pub struct Module<'s>(pub Vec<Statement<'s>>);
 

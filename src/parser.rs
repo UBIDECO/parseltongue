@@ -21,6 +21,8 @@
 // the License.
 
 #[cfg(not(feature = "std"))]
+use alloc::vec;
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Display, Formatter};
 use core::str::Lines;
