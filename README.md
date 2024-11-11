@@ -66,12 +66,12 @@ expression, unless there are non-closed brackets, quotes or a line ends with com
 
 List of languages made with Parseltongue (potentially incomplete):
 
-- Vesper: structured markup language to define schema-less data;
-- Strict types: declarative language for defining generalized algebraic data types;
-- STON: Strict-typed object notation;
-- Cation: functional general-purpose programming language made with category theory in mind;
-- StingerJet: language for defining deterministic Bitcoin wallet descriptors;
-- Contractum: language for writing smart contracts.
+- [Vesper]: structured markup language to define schema-less data;
+- [Strict types]: declarative language for defining generalized algebraic data types;
+- [STON]: Strict-typed object notation;
+- [Cation]: functional general-purpose programming language made with category theory in mind;
+- [StingerJet]: language for defining deterministic Bitcoin wallet descriptors;
+- [Contractum]: language for writing smart contracts.
 
 ## License
 
@@ -91,3 +91,15 @@ Unless required by applicable law or agreed to in writing, software distributed 
 is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied. See the License for the specific language governing permissions and limitations under
 the License.
+
+[Vesper]: https://github.com/UBIDECO/vesper
+
+[Strict types]: https://strict-types.org
+
+[STON]: https://strict-types.org/STON
+
+[Cation]: https://cation-lang.org
+
+[Contractum]: https://contractum.org
+
+[StingerJet]: https://lnp-bp.org/StingerJet

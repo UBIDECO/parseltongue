@@ -32,5 +32,8 @@ extern crate amplify;
 mod statement;
 mod parser;
 
-pub use parser::{Block, Brackets, ParseError, ParsedSource, Parser, Quotes, UnparsedSource};
+pub use parser::{
+    Block, Brackets, ParseError, ParsedSource, Parser, Quotes, UnparsedSource,
+    CLOSING_MULTILINE_COMMENT, OPENING_MULTILINE_COMMENT,
+};
 pub use statement::{Decl, Module, Statement};
