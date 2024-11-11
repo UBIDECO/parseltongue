@@ -111,8 +111,8 @@ impl<'src> Lexer<'src> {
 
     pub fn parse_comments(&mut self) -> Result<Lexeme, LexerError> {
         let block = LexTy::Comment.start(self.0.cursor);
-        let exists = self.0.skip_whitespace_in_line();
-        debug_assert!(exists);
+        self.0.skip_whitespace_in_line();
+        debug_assert!(!self.0.is_finished());
         debug_assert!(self.line().starts_with(OPENING_MULTILINE_COMMENT));
         self.0.seek_in_line(2);
         let mut depth = 0usize;
@@ -132,8 +132,8 @@ impl<'src> Lexer<'src> {
 
     pub fn parse_quotes(&mut self, quotes: Quotes) -> Result<Lexeme, LexerError> {
         let block = quotes.start(self.0.cursor);
-        let exists = self.0.skip_whitespace_in_line();
-        debug_assert!(exists);
+        self.0.skip_whitespace_in_line();
+        debug_assert!(!self.0.is_finished());
         debug_assert!(self.line().starts_with(quotes.quotes_str()));
         self.0.seek_in_line(quotes.len());
         loop {
@@ -151,8 +151,8 @@ impl<'src> Lexer<'src> {
 
     pub fn parse_brackets(&mut self, brackets: Brackets) -> Result<Lexeme, LexerError> {
         let block = brackets.start(self.0.cursor);
-        let exists = self.0.skip_whitespace_in_line();
-        debug_assert!(exists);
+        self.0.skip_whitespace_in_line();
+        debug_assert!(!self.0.is_finished());
         debug_assert!(self.line().starts_with(brackets.opening_bracket()));
         self.0.seek_in_line(1);
         loop {

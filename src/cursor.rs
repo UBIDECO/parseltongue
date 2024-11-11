@@ -203,36 +203,30 @@ impl<'src> Cursor<'src> {
         true
     }
 
-    pub fn skip_whitespace_in_line(&mut self) -> bool {
+    pub fn skip_whitespace_in_line(&mut self) {
         let line = self.line_remainder();
         if line.is_empty() {
-            return false;
+            return;
         }
         let pos = line.as_ptr() as usize;
         let offset = line.trim_start().as_ptr() as usize - pos;
-        if offset == 0 {
-            return !self.is_finished();
+        if offset != 0 {
+            self.cursor.col += offset;
+            self.cursor.offset += offset;
         }
-        self.cursor.col += offset;
-        self.cursor.offset += offset;
-        !self.is_finished()
     }
 
-    #[must_use]
-    pub fn skip_whitespace(&mut self) -> bool {
-        loop {
+    pub fn skip_whitespace(&mut self) {
+        while !self.is_finished() {
             let line = self.line_remainder();
             if line.is_empty() {
-                if self.is_finished() {
-                    return false;
-                }
-                let exists = self.skip_line();
-                debug_assert!(exists);
+                self.skip_line();
+                continue;
             }
             let pos = line.as_ptr() as usize;
             let offset = line.trim_start().as_ptr() as usize - pos;
             if offset == 0 {
-                return !self.is_finished();
+                break;
             }
             self.cursor.col += offset;
             self.cursor.offset += offset;
@@ -246,17 +240,17 @@ impl<'src> Cursor<'src> {
         !self.is_finished()
     }
 
-    pub fn seek(&mut self, mut offset: usize) -> bool {
-        debug_assert!(!self.is_finished() && self.cursor.offset + offset <= self.limit.offset);
-        while offset >= self.line_remainder().len() {
-            offset -= self.line_remainder().len();
-            let exists = self.skip_line();
-            debug_assert!(exists);
+    pub fn seek(&mut self, mut offset: usize) {
+        debug_assert!(self.cursor.offset + offset <= self.limit.offset);
+        while !self.is_finished() && offset > self.line_remainder().len() {
+            offset -= self.line_remainder().len() + 1;
+            self.skip_line();
         }
-        debug_assert!(!self.is_finished());
+        if self.is_finished() {
+            assert_eq!(offset, 0);
+        }
         self.cursor.col += offset;
         self.cursor.offset += offset;
-        !self.is_finished()
     }
 }
 
@@ -344,5 +338,29 @@ mod test {
         the box like Python's textwrap.dedent function.
         "#,
         );
+    }
+
+    #[test]
+    fn skip_whitespace() {
+        for text in ["", " ", "  ", "     ", "\n", "\n\n", "\n\n\n\n", " \n \n\t\n  \t   \n"] {
+            let src = Source::from(text);
+            let mut cursor = Cursor::new(src);
+            cursor.skip_whitespace();
+            assert!(cursor.is_finished());
+        }
+    }
+
+    #[test]
+    fn seek() {
+        for text in [" ", "  ", "     ", "\n", "\n\n", "\n\n\n\n", " \n \n\t\n  \t   \n"] {
+            let src = Source::from(text);
+            let mut cursor = Cursor::new(src);
+            cursor.seek(text.len() - 1);
+            assert!(!cursor.is_finished());
+            assert_eq!(cursor.cursor.offset, text.len() - 1);
+            cursor.seek(1);
+            assert_eq!(cursor.cursor.offset, text.len());
+            assert!(cursor.is_finished());
+        }
     }
 }
