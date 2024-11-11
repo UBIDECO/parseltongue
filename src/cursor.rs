@@ -60,7 +60,7 @@ impl Display for Loc {
 }
 
 impl Loc {
-    pub fn span(self, end: Loc) -> Span { Span { start: self, end } }
+    pub const fn span(self, end: Loc) -> Span { Span { start: self, end } }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
@@ -97,6 +97,7 @@ pub struct Source<'src> {
 
 impl<'src> From<&'src str> for Source<'src> {
     fn from(raw: &'src str) -> Self {
+        assert!(raw.find('\r').is_none(), "source string must not contain caret return characters");
         Source {
             file: None,
             raw,
@@ -106,6 +107,8 @@ impl<'src> From<&'src str> for Source<'src> {
 }
 
 impl<'src> Source<'src> {
+    pub fn span(&self, span: Span) -> &'src str { &self.raw[span.start.offset..span.end.offset] }
+
     pub fn fmt_span(&self, f: Formatter<'_>, span: Span) { todo!() }
 
     pub fn line_after(&self, loc: Loc) -> &'src str {
@@ -139,12 +142,12 @@ impl<'src> Cursor<'src> {
         Cursor { cursor: Default::default(), limit: source.eof(), source }
     }
 
-    pub fn peek_char_this_line(&self) -> Option<char> { self.unprocessed_line().chars().next() }
+    pub fn peek_char_this_line(&self) -> Option<char> { self.line_remainder().chars().next() }
 
-    pub fn unprocessed_line(&self) -> &'src str { self.source.line_after(self.cursor) }
+    pub fn line_remainder(&self) -> &'src str { self.source.line_after(self.cursor) }
 
     #[must_use]
-    fn is_finished(&self) -> bool {
+    pub fn is_finished(&self) -> bool {
         debug_assert!(self.cursor.offset <= self.source.raw.len());
         if !self.source.lines.is_empty() {
             debug_assert!(self.cursor.col <= self.source.lines[self.cursor.line].len());
@@ -160,9 +163,8 @@ impl<'src> Cursor<'src> {
     }
 
     #[must_use]
-    fn is_last_line(&self) -> bool { self.cursor.line == self.limit.line }
+    pub fn is_last_line(&self) -> bool { self.cursor.line == self.limit.line }
 
-    #[must_use]
     pub fn skip_line(&mut self) -> bool {
         if self.is_last_line() {
             return false;
@@ -174,14 +176,13 @@ impl<'src> Cursor<'src> {
         !self.is_finished()
     }
 
-    #[must_use]
     pub fn skip_char(&mut self) -> bool {
-        if self.is_finished() || self.unprocessed_line().is_empty() {
+        if self.is_finished() || self.line_remainder().is_empty() {
             return false;
         }
         self.cursor.col += 1;
         self.cursor.offset += 1;
-        !self.is_finished()
+        true
     }
 
     #[must_use]
@@ -190,25 +191,26 @@ impl<'src> Cursor<'src> {
             return false;
         }
         if self.skip_char() {
-            return !self.is_finished();
+            return true;
         }
         while self.skip_line() {
-            if !self.unprocessed_line().is_empty() {
+            if !self.line_remainder().is_empty() {
                 return true;
             }
         }
-        !self.is_finished()
+        true
     }
 
-    #[must_use]
-    pub fn seek(&mut self, mut offset: usize) -> bool {
-        debug_assert!(!self.is_finished() && self.cursor.offset + offset <= self.limit.offset);
-        while offset > self.unprocessed_line().len() {
-            offset -= self.unprocessed_line().len();
-            let exists = self.skip_line();
-            debug_assert!(exists);
+    pub fn skip_whitespace_in_line(&mut self) -> bool {
+        let line = self.line_remainder();
+        if line.is_empty() {
+            return false;
         }
-        debug_assert!(!self.is_finished());
+        let pos = line.as_ptr() as usize;
+        let offset = line.trim_start().as_ptr() as usize - pos;
+        if offset == 0 {
+            return !self.is_finished();
+        }
         self.cursor.col += offset;
         self.cursor.offset += offset;
         !self.is_finished()
@@ -217,7 +219,7 @@ impl<'src> Cursor<'src> {
     #[must_use]
     pub fn skip_whitespace(&mut self) -> bool {
         loop {
-            let line = self.unprocessed_line();
+            let line = self.line_remainder();
             if line.is_empty() {
                 if self.is_finished() {
                     return false;
@@ -234,6 +236,26 @@ impl<'src> Cursor<'src> {
             self.cursor.offset += offset;
         }
     }
+
+    pub fn seek_in_line(&mut self, offset: usize) -> bool {
+        debug_assert!(offset <= self.line_remainder().len());
+        self.cursor.col += offset;
+        self.cursor.offset += offset;
+        !self.is_finished()
+    }
+
+    pub fn seek(&mut self, mut offset: usize) -> bool {
+        debug_assert!(!self.is_finished() && self.cursor.offset + offset <= self.limit.offset);
+        while offset >= self.line_remainder().len() {
+            offset -= self.line_remainder().len();
+            let exists = self.skip_line();
+            debug_assert!(exists);
+        }
+        debug_assert!(!self.is_finished());
+        self.cursor.col += offset;
+        self.cursor.offset += offset;
+        !self.is_finished()
+    }
 }
 
 #[cfg(test)]
@@ -245,10 +267,10 @@ mod test {
         let mut cursor = Cursor::new(src);
         let mut loc = Loc::default();
         assert_eq!(cursor.limit.line, text.chars().filter(|c| *c == '\n').count());
-        for _ in 0..text.len() {
+        while !cursor.is_finished() {
             loc.col += 1;
             while loc.offset < text.len() && text.as_bytes()[loc.offset] == b'\n' {
-                assert_eq!(cursor.unprocessed_line(), "");
+                assert_eq!(cursor.line_remainder(), "");
                 assert_eq!(cursor.peek_char_this_line(), None);
                 loc.col = 0;
                 loc.line += 1;
@@ -259,17 +281,12 @@ mod test {
             }
 
             let exists = cursor.skip_char_or_line();
-            if cursor.is_finished() {
-                assert!(!exists);
-            } else {
-                assert!(exists);
-                assert_eq!(cursor.cursor, loc);
-            }
+            assert!(exists);
+            assert_eq!(cursor.cursor, loc);
         }
-        assert!(!cursor.skip_char_or_line());
-        assert!(cursor.is_last_line());
-        assert!(cursor.is_finished());
-        assert_eq!(cursor.unprocessed_line(), "");
+        assert_eq!(cursor.cursor.offset, text.len());
+        assert_eq!(cursor.skip_char_or_line(), false);
+        assert_eq!(cursor.line_remainder(), "");
         assert_eq!(cursor.peek_char_this_line(), None);
     }
 
@@ -279,19 +296,23 @@ mod test {
         let mut cursor = Cursor::new(src);
         assert!(cursor.is_last_line());
         assert!(cursor.is_finished());
-        assert_eq!(cursor.unprocessed_line(), "");
+        assert_eq!(cursor.line_remainder(), "");
         assert_eq!(cursor.peek_char_this_line(), None);
-        assert!(!cursor.skip_char_or_line());
+        assert_eq!(cursor.skip_char_or_line(), false);
         assert!(cursor.is_last_line());
         assert!(cursor.is_finished());
     }
 
     #[test]
-    fn next_char_or_line() {
+    fn whitespace() {
         test_cursor(" ");
         test_cursor("\n");
         test_cursor("\n\n");
         test_cursor("\n\n\n\n\n\n\n\n\n\n");
+    }
+
+    #[test]
+    fn next_char_or_line() {
         test_cursor("A");
         test_cursor("AB");
         test_cursor("\nA");
@@ -299,6 +320,10 @@ mod test {
         test_cursor("A\nB");
         test_cursor("A\nB\n");
         test_cursor("\nA\nB\n");
+    }
+
+    #[test]
+    fn text() {
         test_cursor(
             r#"
         In Rust, you can use a raw string literal to include newline characters

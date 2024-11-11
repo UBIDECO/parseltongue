@@ -25,10 +25,10 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Display, Formatter};
-use core::str::Lines;
 
 use crate::{
-    Brackets, Loc, Quotes, Source, Span, CLOSING_MULTILINE_COMMENT, OPENING_MULTILINE_COMMENT,
+    Brackets, Cursor, Loc, Quotes, Source, Span, CLOSING_MULTILINE_COMMENT,
+    OPENING_MULTILINE_COMMENT,
 };
 
 impl Brackets {
@@ -88,8 +88,8 @@ impl Display for LexStart {
 }
 
 impl LexStart {
-    pub const fn end(self, line: usize, col: usize) -> Lexeme {
-        Lexeme { ty: self.ty, span: self.begin.span(Loc { line, col }) }
+    pub const fn end(self, end: Loc) -> Lexeme {
+        Lexeme { ty: self.ty, span: self.begin.span(end) }
     }
 }
 
@@ -99,62 +99,31 @@ pub struct Lexeme {
     pub span: Span,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Lexemes<'src> {
-    pub source: Source<'src>,
-    pub blocks: Vec<Lexeme>,
-}
-
-impl<'src> Lexemes<'src> {
-    pub fn parse(source: &'src str) -> Result<Self, UnparsedSource<'src>> {
-        let lines = source.lines().collect();
-        match Lexer::parse(source) {
-            Err(error) => Err(UnparsedSource { lines, error }),
-            Ok(blocks) => Ok(Self { source, lines, blocks }),
-        }
-    }
-
-    pub fn get(&self, index: usize) -> Option<(LexTy, &str)> {
-        let block = self.blocks.get(index)?;
-        let start = self.lines[block.begin.line].as_ptr() as usize + block.begin.col
-            - self.source.as_ptr() as usize;
-        let end = self.lines[block.end.line].as_ptr() as usize + block.end.col
-            - self.source.as_ptr() as usize;
-        Some((block.ty, &self.source[start..end]))
-    }
-}
-
-pub struct Lexer<'src>
-where Self: 'src
-{
-    lines: Lines<'src>,
-    curr_line: &'src str,
-    curr_loc: Loc,
-}
+pub struct Lexer<'src>(Cursor<'src>);
 
 impl<'src> Lexer<'src> {
-    pub fn parse(code: &'src str) -> Result<Vec<Lexeme>, LexerError> {
-        let mut lines = code.lines();
-        let Some(curr_line) = lines.next() else {
-            return Ok(vec![]);
-        };
-        let mut parser = Lexer { lines, curr_line, curr_loc: Loc::default() };
-        parser.parse_blocks()
+    pub fn parse(source: Source<'src>) -> Result<Vec<Lexeme>, UnparsedSource<'src>> {
+        let mut parser = Lexer(Cursor::new(source.clone()));
+        parser
+            .parse_blocks()
+            .map_err(|error| UnparsedSource { source, error })
     }
 
     pub fn parse_comments(&mut self) -> Result<Lexeme, LexerError> {
-        debug_assert!(self.curr_line.starts_with(OPENING_MULTILINE_COMMENT));
-        let block = LexTy::Comment.start(self.curr_loc);
+        let block = LexTy::Comment.start(self.0.cursor);
+        let exists = self.0.skip_whitespace_in_line();
+        debug_assert!(exists);
+        debug_assert!(self.line().starts_with(OPENING_MULTILINE_COMMENT));
+        self.0.seek_in_line(2);
         let mut depth = 0usize;
-        self.shift_col(2);
         loop {
-            if self.curr_line.starts_with(CLOSING_MULTILINE_COMMENT) {
+            if self.line().starts_with(CLOSING_MULTILINE_COMMENT) {
                 if depth == 0 {
                     return Ok(self.end(block));
                 } else {
                     depth -= 1;
                 }
-            } else if self.curr_line.starts_with(OPENING_MULTILINE_COMMENT) {
+            } else if self.line().starts_with(OPENING_MULTILINE_COMMENT) {
                 depth += 1;
             }
             self.shift_or_fail(block)?;
@@ -162,13 +131,15 @@ impl<'src> Lexer<'src> {
     }
 
     pub fn parse_quotes(&mut self, quotes: Quotes) -> Result<Lexeme, LexerError> {
-        debug_assert!(self.curr_line.starts_with(quotes.quotes_str()));
-        let block = quotes.start(self.curr_loc);
-        self.shift_col(quotes.len());
+        let block = quotes.start(self.0.cursor);
+        let exists = self.0.skip_whitespace_in_line();
+        debug_assert!(exists);
+        debug_assert!(self.line().starts_with(quotes.quotes_str()));
+        self.0.seek_in_line(quotes.len());
         loop {
-            if let Some(col_end) = self.curr_line.find(quotes.quotes_str()) {
-                let line = self.curr_line;
-                self.shift_col(col_end);
+            if let Some(col_end) = self.line().find(quotes.quotes_str()) {
+                let line = self.line();
+                self.0.seek_in_line(col_end);
                 // Ignore if backslash is used
                 if col_end == 0 || line.as_bytes()[col_end - 1] != b'\\' {
                     return Ok(self.end(block));
@@ -179,13 +150,16 @@ impl<'src> Lexer<'src> {
     }
 
     pub fn parse_brackets(&mut self, brackets: Brackets) -> Result<Lexeme, LexerError> {
-        debug_assert!(self.curr_line.starts_with(brackets.opening_bracket()));
-        let block = brackets.start(self.curr_loc);
-        self.shift_col(1);
+        let block = brackets.start(self.0.cursor);
+        let exists = self.0.skip_whitespace_in_line();
+        debug_assert!(exists);
+        debug_assert!(self.line().starts_with(brackets.opening_bracket()));
+        self.0.seek_in_line(1);
         loop {
-            if let Some(closing_bracket) = Brackets::detect_closing(self.curr_line) {
+            self.0.skip_whitespace_in_line();
+            if let Some(closing_bracket) = Brackets::detect_closing(self.line()) {
                 return if closing_bracket != brackets {
-                    Err(LexerError::MismatchedBrackets(block, self.curr_loc, closing_bracket))
+                    Err(LexerError::MismatchedBrackets(block, self.0.cursor, closing_bracket))
                 } else {
                     Ok(self.end(block))
                 };
@@ -197,28 +171,29 @@ impl<'src> Lexer<'src> {
     }
 
     pub fn parse_default(&mut self) -> Result<Lexeme, LexerError> {
-        let block = LexTy::Code.start(self.curr_loc);
-        self.shift_col(1);
-        loop {
+        let block = LexTy::Code.start(self.0.cursor);
+        self.0.skip_whitespace_in_line();
+        self.0.skip_char();
+        while !self.line().is_empty() {
             if self.parse_std_block()?.is_none() {
-                self.shift_col(1);
-            } else if self.curr_line.is_empty() {
-                return Ok(self.end(block));
+                self.0.skip_char();
             }
         }
+        Ok(self.end(block))
     }
 
     pub fn parse_std_block(&mut self) -> Result<Option<Lexeme>, LexerError> {
-        let block = if self.curr_line.starts_with(OPENING_MULTILINE_COMMENT) {
+        let line = self.line().trim_start();
+        let block = if line.starts_with(OPENING_MULTILINE_COMMENT) {
             self.parse_comments()?
-        } else if self.curr_line.starts_with(CLOSING_MULTILINE_COMMENT) {
-            return Err(LexerError::UnmatchedComment(self.curr_loc));
-        } else if let Some(quotes) = Quotes::detect(self.curr_line) {
+        } else if line.starts_with(CLOSING_MULTILINE_COMMENT) {
+            return Err(LexerError::UnmatchedComment(self.0.cursor));
+        } else if let Some(quotes) = Quotes::detect(line) {
             self.parse_quotes(quotes)?
-        } else if let Some(brackets) = Brackets::detect_opening(self.curr_line) {
+        } else if let Some(brackets) = Brackets::detect_opening(line) {
             self.parse_brackets(brackets)?
-        } else if let Some(closing_bracket) = Brackets::detect_closing(self.curr_line) {
-            return Err(LexerError::UnmatchedBrackets(self.curr_loc, closing_bracket));
+        } else if let Some(closing_bracket) = Brackets::detect_closing(line) {
+            return Err(LexerError::UnmatchedBrackets(self.0.cursor, closing_bracket));
         } else {
             return Ok(None);
         };
@@ -227,66 +202,35 @@ impl<'src> Lexer<'src> {
 
     fn parse_blocks(&mut self) -> Result<Vec<Lexeme>, LexerError> {
         let mut blocks = vec![];
-        while self.skip_whitespace().is_some() {
+        while !self.0.is_finished() {
             if let Some(block) = self.parse_std_block()? {
                 blocks.push(block);
             } else {
                 let block = self.parse_default()?;
-                blocks.push(block);
-                if self.shift_line().is_none() {
-                    return Ok(blocks);
+                if !self.0.source.span(block.span).is_empty() {
+                    blocks.push(block);
                 }
+                self.0.skip_line();
             }
         }
         Ok(blocks)
     }
 
     fn end(&mut self, block: LexStart) -> Lexeme {
-        self.shift_col(block.ty.delim_len());
-        block.end(self.curr_loc.line, self.curr_loc.col)
-    }
-
-    #[must_use]
-    fn skip_whitespace(&mut self) -> Option<()> {
-        loop {
-            let start = self.curr_line.as_ptr() as usize;
-            let trimmed = self.curr_line.trim_start();
-
-            if trimmed.is_empty() {
-                self.shift_line()?;
-                continue;
-            }
-
-            let new = trimmed.as_ptr() as usize;
-            self.curr_line = trimmed;
-            self.curr_loc.col += new - start;
-            return Some(());
-        }
+        self.0.seek_in_line(block.ty.delim_len());
+        self.0.skip_whitespace_in_line();
+        block.end(self.0.cursor)
     }
 
     fn shift_or_fail(&mut self, block: LexStart) -> Result<(), LexerError> {
-        if self.curr_line.is_empty() {
-            self.shift_line().ok_or(LexerError::from(block))?;
-        } else {
-            self.curr_line = &self.curr_line[1..];
-            self.curr_loc.col += 1;
+        if !self.0.skip_char_or_line() {
+            return Err(LexerError::from(block));
         }
-        self.skip_whitespace().ok_or(LexerError::from(block))?;
         Ok(())
     }
 
-    #[must_use]
-    fn shift_line(&mut self) -> Option<()> {
-        self.curr_line = &self.lines.next()?;
-        self.curr_loc.line += 1;
-        self.curr_loc.col = 0;
-        Some(())
-    }
-
-    fn shift_col(&mut self, offset: usize) {
-        self.curr_line = &self.curr_line[offset..];
-        self.curr_loc.col += offset;
-    }
+    #[inline]
+    fn line(&self) -> &'src str { self.0.line_remainder() }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -357,26 +301,27 @@ impl LexerError {
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct UnparsedSource<'src> {
-    pub lines: Vec<&'src str>,
+    pub source: Source<'src>,
     pub error: LexerError,
 }
 
 impl<'s> Debug for UnparsedSource<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         writeln!(f, "Error: {}", self.error)?;
-        let err_loc = self
-            .error
-            .error_loc()
-            .unwrap_or(Loc { line: self.lines.len(), col: 0 });
+        let err_loc = self.error.error_loc().unwrap_or(Loc {
+            line: self.source.lines.len(),
+            col: 0,
+            offset: self.source.raw.len(),
+        });
         writeln!(f, "      --> line {}, column {}", err_loc.line + 1, err_loc.col + 1)?;
 
         if err_loc.line > 0 {
-            writeln!(f, "{: >6} | {}", err_loc.line, self.lines[err_loc.line - 1])?;
+            writeln!(f, "{: >6} | {}", err_loc.line, self.source.lines[err_loc.line - 1])?;
         }
-        if err_loc.line >= self.lines.len() {
+        if err_loc.line >= self.source.lines.len() {
             writeln!(f, "{: >6} | EOF", err_loc.line + 1)?;
         } else {
-            writeln!(f, "{: >6} | {}", err_loc.line + 1, self.lines[err_loc.line])?;
+            writeln!(f, "{: >6} | {}", err_loc.line + 1, self.source.lines[err_loc.line])?;
         }
         let pos = err_loc.col + 1;
         writeln!(f, "       |{: >pos$}^", "")?;
@@ -417,7 +362,7 @@ impl<'s> Debug for UnparsedSource<'s> {
         if let Some(start) = self.error.block_start() {
             writeln!(f)?;
             writeln!(f, "      --> the relevant {start}")?;
-            writeln!(f, "{: >6} | {}", start.begin.line + 1, self.lines[start.begin.line])?;
+            writeln!(f, "{: >6} | {}", start.begin.line + 1, self.source.lines[start.begin.line])?;
             writeln!(f, "       |{: >pos$} ^", "", pos = start.begin.col)?;
             writeln!(
                 f,
@@ -440,36 +385,50 @@ impl<'src> Display for UnparsedSource<'src> {
 mod test {
     use super::*;
 
-    fn parse(code: &str) -> Lexemes {
-        match Lexemes::parse(code) {
+    fn parse(code: &str) -> (Source, Vec<Lexeme>) {
+        let source = Source::from(code);
+        match Lexer::parse(source.clone()) {
             Err(err) => {
                 eprintln!("{err}");
                 panic!("Test case has failed");
             }
-            Ok(parsed) => parsed,
+            Ok(parsed) => {
+                println!("{parsed:#?}");
+                (source, parsed)
+            }
         }
     }
 
     fn test_block(code: &str, ty: LexTy) {
-        let parsed = parse(code);
-        assert_eq!(parsed.blocks.len(), 1);
-        assert_eq!(parsed.blocks[0].ty, ty);
-        assert_eq!(code.trim(), parsed.get(0).unwrap().1);
+        let (source, lexemes) = parse(code);
+        assert_eq!(lexemes.len(), 1);
+        assert_eq!(lexemes[0].ty, ty);
+        assert_eq!(code.trim_start_matches('\n'), source.span(lexemes[0].span));
     }
 
     fn test_blocks<const LEN: usize>(code: &str, ty: [LexTy; LEN], src: [&str; LEN]) {
-        let parsed = parse(code);
-        assert_eq!(parsed.blocks.len(), LEN);
+        let (source, lexemes) = parse(code);
+        assert_eq!(lexemes.len(), LEN);
         for i in 0..LEN {
-            assert_eq!(parsed.blocks[i].ty, ty[i]);
-            assert_eq!(parsed.get(i).unwrap().1, src[i]);
+            assert_eq!(lexemes[i].ty, ty[i]);
+            assert_eq!(src[i], source.span(lexemes[i].span));
         }
     }
 
     #[test]
     fn empty() {
-        for code in ["", " ", "\t", " \t ", "\n", "\n \n", "\r", "\n\r", "\r\n", "\n \t \n    \r"] {
-            assert!(parse(code).blocks.is_empty())
+        assert!(parse("").1.is_empty());
+        for code in [" ", "\t", " \t ", "\n", "\n \n"] {
+            parse(code);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn cr() {
+        assert!(parse("").1.is_empty());
+        for code in ["\r", "\n\r", "\r\n", "\n \t \n    \r"] {
+            assert!(!parse(code).1.is_empty())
         }
     }
 
@@ -493,17 +452,17 @@ mod test {
         test_blocks(
             "{- first comment -} {- second comment -}",
             [LexTy::Comment, LexTy::Comment],
-            ["{- first comment -}", "{- second comment -}"],
+            ["{- first comment -} ", "{- second comment -}"],
         );
         test_blocks(
             "{- first comment -} \n\t{- second comment -} \t",
             [LexTy::Comment, LexTy::Comment],
-            ["{- first comment -}", "{- second comment -}"],
+            ["{- first comment -} ", "\t{- second comment -} \t"],
         );
         test_blocks(
             "{- first {- first nested -} comment -} {-{-second nested-} second comment -}",
             [LexTy::Comment, LexTy::Comment],
-            ["{- first {- first nested -} comment -}", "{-{-second nested-} second comment -}"],
+            ["{- first {- first nested -} comment -} ", "{-{-second nested-} second comment -}"],
         );
     }
 
@@ -581,52 +540,23 @@ mod test {
     #[test]
     fn multi_nested() {
         const CODE: &str = include_str!("../test-data/multi_nested.ptg");
-        let src = Lexemes::parse(CODE).unwrap();
-
-        assert_eq!(
-            src.get(0)
-                .map(|(ty, code)| (ty, code.replace('\r', "")))
-                .unwrap(),
-            (
-                LexTy::Comment,
-                r#"{- Some multi-line comment
+        test_blocks(CODE, [LexTy::Comment, LexTy::Code, LexTy::Quotes(Quotes::TripleBack)], [
+            r#"{- Some multi-line comment
   with {- nested comments -}
   even {- multiline
    nested {- many times
    -}
   "-} including quoted
--}"#
-                .to_owned()
-            )
-        );
-
-        assert_eq!(
-            src.get(1)
-                .map(|(ty, code)| (ty, code.replace('\r', "")))
-                .unwrap(),
-            (
-                LexTy::Code,
-                r#"decl name: some [
+-}"#,
+            r#"decl name: some [
   (brackets many-level { nested }
     "and quoted '"
   )
-]"#
-                .to_owned()
-            )
-        );
-
-        assert_eq!(
-            src.get(2)
-                .map(|(ty, code)| (ty, code.replace('\r', "")))
-                .unwrap(),
-            (
-                LexTy::Quotes(Quotes::TripleBack),
-                r#"```back-quoted part
+]"#,
+            r#"```back-quoted part
  with unclosed brackets {
  and wrong quotes "
-```"#
-                    .to_owned()
-            )
-        );
+```"#,
+        ]);
     }
 }
