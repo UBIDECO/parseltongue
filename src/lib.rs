@@ -21,6 +21,10 @@
 // the License.
 
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 
 #[macro_use]
 extern crate amplify;
@@ -28,4 +32,5 @@ extern crate amplify;
 mod statement;
 mod parser;
 
+pub use parser::{Block, Brackets, ParseError, ParsedSource, Parser, Quotes, UnparsedSource};
 pub use statement::{Decl, Module, Statement};

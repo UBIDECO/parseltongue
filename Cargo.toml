@@ -6,7 +6,7 @@ description = "Framework for declarative domain-specific languages"
 repository = "https://github.com/UBIDECO/parseltongue"
 homepage = "https://ubideco.org/ParselTongue"
 keywords = ["language", "declarative", "syntax", "parser"]
-categories = ["parser-implementations"]
+categories = ["parser-implementations", "no-std"]
 readme = "README.md"
 license = "Apache-2.0"
 edition = "2021"
@@ -20,8 +20,10 @@ name = "parseltongue"
 amplify = "~4.8.0"
 
 [features]
-default = []
-all = []
+default = ["std"]
+all = ["std"]
+
+std = []
 
 [package.metadata.docs.rs]
 features = ["all"]
