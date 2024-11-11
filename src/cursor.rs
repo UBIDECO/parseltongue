@@ -20,6 +20,8 @@
 // or implied. See the License for the specific language governing permissions and limitations under
 // the License.
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt::{self, Display, Formatter};
 

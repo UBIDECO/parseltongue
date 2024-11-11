@@ -399,6 +399,11 @@ mod test {
         }
     }
 
+    fn parse_expect(code: &str, err: LexerError) {
+        let source = Source::from(code);
+        assert_eq!(Lexer::parse(source.clone()).unwrap_err().error, err);
+    }
+
     fn test_block(code: &str, ty: LexTy) {
         let (source, lexemes) = parse(code);
         assert_eq!(lexemes.len(), 1);
@@ -540,23 +545,104 @@ mod test {
     #[test]
     fn multi_nested() {
         const CODE: &str = include_str!("../test-data/multi_nested.ptg");
-        test_blocks(CODE, [LexTy::Comment, LexTy::Code, LexTy::Quotes(Quotes::TripleBack)], [
-            r#"{- Some multi-line comment
+        test_blocks(
+            &CODE.replace('\r', ""),
+            [LexTy::Comment, LexTy::Code, LexTy::Quotes(Quotes::TripleBack)],
+            [
+                r#"{- Some multi-line comment
   with {- nested comments -}
   even {- multiline
    nested {- many times
    -}
   "-} including quoted
 -}"#,
-            r#"decl name: some [
+                r#"decl name: some [
   (brackets many-level { nested }
     "and quoted '"
   )
 ]"#,
-            r#"```back-quoted part
+                r#"```back-quoted part
  with unclosed brackets {
  and wrong quotes "
 ```"#,
-        ]);
+            ],
+        );
+    }
+
+    #[test]
+    fn non_closed_comment() {
+        parse_expect(
+            "{- comment no closing",
+            LexerError::UnclosedComment(LexTy::Comment.start(Loc::default())),
+        );
+    }
+
+    #[test]
+    fn non_closed_brackets() {
+        parse_expect(
+            "(unclosed brackets",
+            LexerError::UnclosedBrackets(LexTy::Brackets(Brackets::Round).start(Loc::default())),
+        );
+        parse_expect(
+            "[unclosed brackets",
+            LexerError::UnclosedBrackets(LexTy::Brackets(Brackets::Square).start(Loc::default())),
+        );
+        parse_expect(
+            "{unclosed brackets",
+            LexerError::UnclosedBrackets(LexTy::Brackets(Brackets::Curvy).start(Loc::default())),
+        );
+    }
+
+    #[test]
+    fn non_closed_quotes() {
+        parse_expect(
+            "'unclosed quotes",
+            LexerError::UnclosedQuotes(LexTy::Quotes(Quotes::Single).start(Loc::default())),
+        );
+        parse_expect(
+            "\"unclosed quotes",
+            LexerError::UnclosedQuotes(LexTy::Quotes(Quotes::Double).start(Loc::default())),
+        );
+        parse_expect(
+            "`unclosed quotes",
+            LexerError::UnclosedQuotes(LexTy::Quotes(Quotes::Back).start(Loc::default())),
+        );
+        parse_expect(
+            r#""""unclosed quotes"#,
+            LexerError::UnclosedQuotes(LexTy::Quotes(Quotes::TripleDouble).start(Loc::default())),
+        );
+        parse_expect(
+            "```unclosed quotes",
+            LexerError::UnclosedQuotes(LexTy::Quotes(Quotes::TripleBack).start(Loc::default())),
+        );
+        parse_expect(
+            "'mismatched quotes`",
+            LexerError::UnclosedQuotes(LexTy::Quotes(Quotes::Single).start(Loc::default())),
+        );
+        parse_expect(
+            "'mismatched quotes\"",
+            LexerError::UnclosedQuotes(LexTy::Quotes(Quotes::Single).start(Loc::default())),
+        );
+    }
+
+    #[test]
+    fn mismatched_brackets() {
+        parse_expect(
+            "(parenthesis]",
+            LexerError::MismatchedBrackets(
+                LexTy::Brackets(Brackets::Round).start(Loc::default()),
+                Loc { offset: 12, line: 0, col: 12 },
+                Brackets::Square,
+            ),
+        );
+
+        parse_expect(
+            "{misplaced (})",
+            LexerError::MismatchedBrackets(
+                LexTy::Brackets(Brackets::Round).start(Loc { offset: 11, line: 0, col: 11 }),
+                Loc { offset: 12, line: 0, col: 12 },
+                Brackets::Curvy,
+            ),
+        );
     }
 }
