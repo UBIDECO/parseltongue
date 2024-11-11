@@ -254,11 +254,17 @@ impl<'src> Parser<'src> {
     pub fn parse_comments(&mut self) -> Result<Block, ParseError> {
         debug_assert!(self.curr_line.starts_with(OPENING_MULTILINE_COMMENT));
         let block = BlockTy::Comment.start(self.curr_loc);
+        let mut depth = 0usize;
         self.shift_col(2);
         loop {
-            if let Some(col_end) = self.curr_line.find(CLOSING_MULTILINE_COMMENT) {
-                self.shift_col(col_end);
-                return Ok(self.end(block));
+            if self.curr_line.starts_with(CLOSING_MULTILINE_COMMENT) {
+                if depth == 0 {
+                    return Ok(self.end(block));
+                } else {
+                    depth -= 1;
+                }
+            } else if self.curr_line.starts_with(OPENING_MULTILINE_COMMENT) {
+                depth += 1;
             }
             self.shift_or_fail(block)?;
         }
@@ -362,9 +368,10 @@ impl<'src> Parser<'src> {
     }
 
     fn shift_or_fail(&mut self, block: BlockStart) -> Result<(), ParseError> {
-        if self.curr_loc.col + 1 == self.curr_line.len() {
+        if self.curr_line.is_empty() {
             self.shift_line().ok_or(ParseError::from(block))?;
         } else {
+            self.curr_line = &self.curr_line[1..];
             self.curr_loc.col += 1;
         }
         self.skip_whitespace().ok_or(ParseError::from(block))?;
@@ -526,10 +533,7 @@ mod test {
                 eprintln!("{err}");
                 panic!("Test case has failed");
             }
-            Ok(parsed) => {
-                println!("{parsed:#?}");
-                parsed
-            }
+            Ok(parsed) => parsed,
         }
     }
 
@@ -538,6 +542,15 @@ mod test {
         assert_eq!(parsed.blocks.len(), 1);
         assert_eq!(parsed.blocks[0].ty, ty);
         assert_eq!(code.trim(), parsed.get(0).unwrap().1);
+    }
+
+    fn test_blocks<const LEN: usize>(code: &str, ty: [BlockTy; LEN], src: [&str; LEN]) {
+        let parsed = parse(code);
+        assert_eq!(parsed.blocks.len(), LEN);
+        for i in 0..LEN {
+            assert_eq!(parsed.blocks[i].ty, ty[i]);
+            assert_eq!(parsed.get(i).unwrap().1, src[i]);
+        }
     }
 
     #[test]
@@ -559,6 +572,25 @@ mod test {
         test_block(
             "{- some \n {- nested {- second level -} \n multi -} \n comment -}",
             BlockTy::Comment,
+        );
+    }
+
+    #[test]
+    fn two_comments() {
+        test_blocks(
+            "{- first comment -} {- second comment -}",
+            [BlockTy::Comment, BlockTy::Comment],
+            ["{- first comment -}", "{- second comment -}"],
+        );
+        test_blocks(
+            "{- first comment -} \n\t{- second comment -} \t",
+            [BlockTy::Comment, BlockTy::Comment],
+            ["{- first comment -}", "{- second comment -}"],
+        );
+        test_blocks(
+            "{- first {- first nested -} comment -} {-{-second nested-} second comment -}",
+            [BlockTy::Comment, BlockTy::Comment],
+            ["{- first {- first nested -} comment -}", "{-{-second nested-} second comment -}"],
         );
     }
 
