@@ -27,7 +27,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Debug, Display, Formatter};
 
 use crate::{
-    Brackets, Cursor, Loc, Quotes, Source, Span, CLOSING_MULTILINE_COMMENT,
+    Brackets, Cursor, Loc, Quotes, Source, Span, UnparsedSource, CLOSING_MULTILINE_COMMENT,
     OPENING_MULTILINE_COMMENT,
 };
 
@@ -297,88 +297,6 @@ impl LexerError {
             | LexerError::UnmatchedBrackets(loc, _) => Some(*loc),
         }
     }
-}
-
-#[derive(Clone, Eq, PartialEq)]
-pub struct UnparsedSource<'src> {
-    pub source: &'src Source<'src>,
-    pub error: LexerError,
-}
-
-impl<'s> Debug for UnparsedSource<'s> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Error: {}", self.error)?;
-        let err_loc = self.error.error_loc().unwrap_or(Loc {
-            line: self.source.lines.len(),
-            col: 0,
-            offset: self.source.raw.len(),
-        });
-        writeln!(f, "      --> line {}, column {}", err_loc.line + 1, err_loc.col + 1)?;
-
-        if err_loc.line > 0 {
-            writeln!(f, "{: >6} | {}", err_loc.line, self.source.lines[err_loc.line - 1])?;
-        }
-        if err_loc.line >= self.source.lines.len() {
-            writeln!(f, "{: >6} | EOF", err_loc.line + 1)?;
-        } else {
-            writeln!(f, "{: >6} | {}", err_loc.line + 1, self.source.lines[err_loc.line])?;
-        }
-        let pos = err_loc.col + 1;
-        writeln!(f, "       |{: >pos$}^", "")?;
-        match &self.error {
-            LexerError::MismatchedBrackets(block, _, brackets) => writeln!(
-                f,
-                "       |{: >pos$}{brackets} closing which doesn't correspond to {block}",
-                ""
-            )?,
-            LexerError::UnmatchedComment(_) => writeln!(
-                f,
-                "       |{: >pos$}closed multiline comment block which was not opened before",
-                ""
-            )?,
-            LexerError::UnmatchedBrackets(_, brackets) => writeln!(
-                f,
-                "       |{: >pos$}{brackets} closing which doesn't have a corresponding opening \
-                 bracket",
-                ""
-            )?,
-            LexerError::UnclosedBrackets(block) => writeln!(
-                f,
-                "       |{: >pos$}at the end of the file {} remains unclosed",
-                "", block.ty
-            )?,
-            LexerError::UnclosedComment(_) => writeln!(
-                f,
-                "       |{: >pos$}at the end of the file multiline comment block remains unclosed",
-                ""
-            )?,
-            LexerError::UnclosedQuotes(block) => writeln!(
-                f,
-                "       |{: >pos$}at the end of the file {} remains unclosed",
-                "", block.ty
-            )?,
-        }
-
-        if let Some(start) = self.error.block_start() {
-            writeln!(f)?;
-            writeln!(f, "      --> the relevant {start}")?;
-            writeln!(f, "{: >6} | {}", start.begin.line + 1, self.source.lines[start.begin.line])?;
-            writeln!(f, "       |{: >pos$} ^", "", pos = start.begin.col)?;
-            writeln!(
-                f,
-                "       |{: >pos$} the {} block was originally defined here",
-                "",
-                start.ty,
-                pos = start.begin.col
-            )?;
-        }
-
-        Ok(())
-    }
-}
-
-impl<'src> Display for UnparsedSource<'src> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result { Debug::fmt(self, f) }
 }
 
 #[cfg(test)]

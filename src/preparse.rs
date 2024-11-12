@@ -26,29 +26,6 @@ use core::fmt::{self, Debug, Formatter};
 
 use crate::{Brackets, Lexeme, Lexer, LexerError, Quotes, Source, Span};
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Term<'src> {
-    pub term: &'src str,
-    pub span: Span,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Module<'src>(Vec<Decl<'src>>);
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum Statement<'src> {
-    Decl(Decl<'src>),
-    Expr(Term<'src>),
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Decl<'src> {
-    pub decl: Term<'src>,
-    pub name: Term<'src>,
-    pub params: Vec<Term<'src>>,
-    pub body: Vec<Statement<'src>>,
-}
-
 #[derive(Clone, Default)]
 pub struct Node<'src> {
     pub term: &'src str,
@@ -71,51 +48,49 @@ impl<'src> Debug for Node<'src> {
     }
 }
 
-impl<'src> Module<'src> {
-    pub fn parse(source: &Source<'src>) -> Result<Node<'src>, ParseError> {
-        let lexemes = Lexer::parse(source).map_err(|e| e.error)?;
+pub fn preparse<'src>(source: &Source<'src>) -> Result<Node<'src>, ParseError> {
+    let lexemes = Lexer::parse(source).map_err(|e| e.error)?;
 
-        fn non_continuation(c: char) -> bool {
-            c.is_alphanumeric()
-                || Brackets::CLOSING_BRACKETS.contains(&c)
-                || Quotes::QUOTES.contains(&c)
-        }
-
-        let mut stack = Vec::<Node>::new();
-        let mut curr = Node::default();
-        for lexeme in lexemes {
-            if lexeme.span.start.col == 0 && curr.term.trim().ends_with(non_continuation) {
-                let term = source.span(lexeme.span);
-                let new_ident = term.len() - term.trim_start().len();
-                let node = Node { term, ident: new_ident, span: lexeme.span, children: vec![] };
-
-                // Pop parents unless we get the same or larger ident
-                while new_ident <= curr.ident && !stack.is_empty() {
-                    let mut parent = stack.pop().unwrap();
-                    // - add prev_parent to parent children
-                    parent.children.push(curr);
-                    curr = parent;
-                }
-                if new_ident < curr.ident {
-                    return Err(ParseError::InvalidIdent(lexeme));
-                }
-                stack.push(curr);
-                curr = node;
-            } else {
-                curr.span.extend(lexeme.span);
-                curr.term = source.span(curr.span);
-            }
-        }
-
-        while let Some(mut parent) = stack.pop() {
-            if !curr.term.trim().is_empty() || !curr.children.is_empty() {
-                parent.children.push(curr);
-            }
-            curr = parent;
-        }
-
-        Ok(curr)
+    fn non_continuation(c: char) -> bool {
+        c.is_alphanumeric()
+            || Brackets::CLOSING_BRACKETS.contains(&c)
+            || Quotes::QUOTES.contains(&c)
     }
+
+    let mut stack = Vec::<Node>::new();
+    let mut curr = Node::default();
+    for lexeme in lexemes {
+        if lexeme.span.start.col == 0 && curr.term.trim().ends_with(non_continuation) {
+            let term = source.span(lexeme.span);
+            let new_ident = term.len() - term.trim_start().len();
+            let node = Node { term, ident: new_ident, span: lexeme.span, children: vec![] };
+
+            // Pop parents unless we get the same or larger ident
+            while new_ident <= curr.ident && !stack.is_empty() {
+                let mut parent = stack.pop().unwrap();
+                // - add prev_parent to parent children
+                parent.children.push(curr);
+                curr = parent;
+            }
+            if new_ident < curr.ident {
+                return Err(ParseError::InvalidIdent(lexeme));
+            }
+            stack.push(curr);
+            curr = node;
+        } else {
+            curr.span.extend(lexeme.span);
+            curr.term = source.span(curr.span);
+        }
+    }
+
+    while let Some(mut parent) = stack.pop() {
+        if !curr.term.trim().is_empty() || !curr.children.is_empty() {
+            parent.children.push(curr);
+        }
+        curr = parent;
+    }
+
+    Ok(curr)
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -164,7 +139,7 @@ fx helloWorld
 "#;
 
         let source = Source::from(CODE);
-        let module = Module::parse(&source).unwrap();
+        let module = preparse(&source).unwrap();
 
         println!("{module:?}");
     }
