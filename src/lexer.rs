@@ -102,8 +102,8 @@ pub struct Lexeme {
 pub struct Lexer<'src>(Cursor<'src>);
 
 impl<'src> Lexer<'src> {
-    pub fn parse(source: Source<'src>) -> Result<Vec<Lexeme>, UnparsedSource<'src>> {
-        let mut parser = Lexer(Cursor::new(source.clone()));
+    pub fn parse(source: &'src Source<'src>) -> Result<Vec<Lexeme>, UnparsedSource<'src>> {
+        let mut parser = Lexer(Cursor::new(&source));
         parser
             .parse_blocks()
             .map_err(|error| UnparsedSource { source, error })
@@ -233,7 +233,7 @@ impl<'src> Lexer<'src> {
     fn line(&self) -> &'src str { self.0.line_remainder() }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum LexerError {
     MismatchedBrackets(LexStart, Loc, Brackets),
     UnmatchedComment(Loc),
@@ -301,7 +301,7 @@ impl LexerError {
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct UnparsedSource<'src> {
-    pub source: Source<'src>,
+    pub source: &'src Source<'src>,
     pub error: LexerError,
 }
 
@@ -387,21 +387,18 @@ mod test {
 
     fn parse(code: &str) -> (Source, Vec<Lexeme>) {
         let source = Source::from(code);
-        match Lexer::parse(source.clone()) {
+        match Lexer::parse(&source) {
             Err(err) => {
                 eprintln!("{err}");
                 panic!("Test case has failed");
             }
-            Ok(parsed) => {
-                println!("{parsed:#?}");
-                (source, parsed)
-            }
+            Ok(parsed) => (source, parsed),
         }
     }
 
     fn parse_expect(code: &str, err: LexerError) {
         let source = Source::from(code);
-        assert_eq!(Lexer::parse(source.clone()).unwrap_err().error, err);
+        assert_eq!(Lexer::parse(&source).unwrap_err().error, err);
     }
 
     fn test_block(code: &str, ty: LexTy) {

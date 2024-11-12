@@ -22,24 +22,145 @@
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::fmt::{self, Debug, Formatter};
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct Module<'src> {
-    pub source: &'src str,
-    pub lines: Vec<&'src str>,
-    pub decls: Vec<Decl<'src>>,
+use crate::lexer::LexTy;
+use crate::{Lexeme, Lexer, LexerError, Source, Span};
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Term<'src> {
+    pub term: &'src str,
+    pub span: Span,
 }
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Module<'src>(Vec<Decl<'src>>);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Statement<'src> {
     Decl(Decl<'src>),
-    Expr(&'src str),
+    Expr(Term<'src>),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Decl<'src> {
-    pub decl: &'src str,
-    pub name: &'src str,
-    pub params: Vec<&'src str>,
+    pub decl: Term<'src>,
+    pub name: Term<'src>,
+    pub params: Vec<Term<'src>>,
     pub body: Vec<Statement<'src>>,
+}
+
+#[derive(Clone, Default)]
+pub struct Node<'src> {
+    pub term: &'src str,
+    pub ident: usize,
+    pub span: Span,
+    pub children: Vec<Node<'src>>,
+}
+
+impl<'src> Debug for Node<'src> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let width = f.width().unwrap_or(0) + 1;
+        writeln!(f, "{:><count$} Term spanning {}", "", self.span, count = width)?;
+        for (no, line) in self.term.lines().enumerate() {
+            writeln!(f, "{: >6} | {line}", no + self.span.start.line + 1)?;
+        }
+        for node in &self.children {
+            writeln!(f, "{node:width$?}")?;
+        }
+        Ok(())
+    }
+}
+
+impl<'src> Module<'src> {
+    pub fn parse(source: &Source<'src>) -> Result<Node<'src>, ParseError> {
+        let lexemes = Lexer::parse(source).map_err(|e| e.error)?;
+
+        let mut stack = Vec::<Node>::new();
+        let mut curr = Node::default();
+        for lexeme in lexemes {
+            if lexeme.span.start.col == 0 {
+                let term = source.span(lexeme.span);
+                let new_ident = term.len() - term.trim_start().len();
+                let node = Node { term, ident: new_ident, span: lexeme.span, children: vec![] };
+
+                // Pop parents unless we get the same or larger ident
+                while new_ident <= curr.ident && !stack.is_empty() {
+                    let mut parent = stack.pop().unwrap();
+                    // - add prev_parent to parent children
+                    parent.children.push(curr);
+                    curr = parent;
+                }
+                if new_ident < curr.ident {
+                    return Err(ParseError::InvalidIdent(lexeme));
+                }
+                stack.push(curr);
+                curr = node;
+            } else {
+                curr.span.extend(lexeme.span);
+                curr.term = source.span(curr.span);
+            }
+        }
+
+        while let Some(mut parent) = stack.pop() {
+            if !curr.term.trim().is_empty() || !curr.children.is_empty() {
+                parent.children.push(curr);
+            }
+            curr = parent;
+        }
+
+        Ok(curr)
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ParseError {
+    Lexer(LexerError),
+    InvalidIdent(Lexeme),
+}
+
+impl From<LexerError> for ParseError {
+    fn from(err: LexerError) -> Self { ParseError::Lexer(err) }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn example() {
+        const CODE: &str = r#"---- Two-dimensional coordinate
+data Coord2D: x U64,
+              y U64
+
+---- Array of coordinates
+data Array: $LEN U8 =>
+    [Coord2D ^ $LEN]
+
+data Matrix: $LEN U8 => [
+    Array $LEN ^ $LEN
+]
+
+---- Cartesian multiplication of two arrays
+infx `*`: $LEN U8 => a Array $LEN, b Array $LEN -> Matrix $LEN
+    [a |> {- for each a -}
+       [b |> {- and for each b -}
+           (a.x *! b.x, a.y *! b.y)
+       ] -- end of b loop
+    ] -- end of a loop
+
+fx helloWorld
+    {-
+        This is just a dumb program
+    -}
+    printLn """
+    Hello, World!
+    """
+"#;
+
+        let source = Source::from(CODE);
+        let module = Module::parse(&source).unwrap();
+
+        println!("{module:?}");
+    }
 }

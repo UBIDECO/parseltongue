@@ -88,6 +88,12 @@ impl Display for Span {
 impl Span {
     pub fn len(&self) -> usize { self.end.offset - self.start.offset }
     pub fn lines(&self) -> usize { self.end.line - self.start.line }
+    pub fn is_empty(&self) -> bool { self.start.offset == self.end.offset }
+
+    pub fn extend(&mut self, other: Span) {
+        // debug_assert_eq!(self.end.offset + 1, other.start.offset);
+        self.end = other.end;
+    }
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -134,13 +140,13 @@ impl<'src> Source<'src> {
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Cursor<'src> {
-    pub source: Source<'src>,
+    pub source: &'src Source<'src>,
     pub cursor: Loc,
     pub limit: Loc,
 }
 
 impl<'src> Cursor<'src> {
-    pub fn new(source: Source<'src>) -> Self {
+    pub fn new(source: &'src Source<'src>) -> Self {
         Cursor { cursor: Default::default(), limit: source.eof(), source }
     }
 
@@ -260,7 +266,7 @@ mod test {
 
     fn test_cursor(text: &str) {
         let src = Source::from(text);
-        let mut cursor = Cursor::new(src);
+        let mut cursor = Cursor::new(&src);
         let mut loc = Loc::default();
         assert_eq!(cursor.limit.line, text.chars().filter(|c| *c == '\n').count());
         while !cursor.is_finished() {
@@ -289,7 +295,7 @@ mod test {
     #[test]
     fn empty() {
         let src = Source::from("");
-        let mut cursor = Cursor::new(src);
+        let mut cursor = Cursor::new(&src);
         assert!(cursor.is_last_line());
         assert!(cursor.is_finished());
         assert_eq!(cursor.line_remainder(), "");
@@ -344,7 +350,7 @@ mod test {
     fn skip_whitespace() {
         for text in ["", " ", "  ", "     ", "\n", "\n\n", "\n\n\n\n", " \n \n\t\n  \t   \n"] {
             let src = Source::from(text);
-            let mut cursor = Cursor::new(src);
+            let mut cursor = Cursor::new(&src);
             cursor.skip_whitespace();
             assert!(cursor.is_finished());
         }
@@ -354,7 +360,7 @@ mod test {
     fn seek() {
         for text in [" ", "  ", "     ", "\n", "\n\n", "\n\n\n\n", " \n \n\t\n  \t   \n"] {
             let src = Source::from(text);
-            let mut cursor = Cursor::new(src);
+            let mut cursor = Cursor::new(&src);
             cursor.seek(text.len() - 1);
             assert!(!cursor.is_finished());
             assert_eq!(cursor.cursor.offset, text.len() - 1);
