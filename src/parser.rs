@@ -24,8 +24,7 @@
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 
-use crate::lexer::LexTy;
-use crate::{Lexeme, Lexer, LexerError, Source, Span};
+use crate::{Brackets, Lexeme, Lexer, LexerError, Quotes, Source, Span};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Term<'src> {
@@ -76,10 +75,16 @@ impl<'src> Module<'src> {
     pub fn parse(source: &Source<'src>) -> Result<Node<'src>, ParseError> {
         let lexemes = Lexer::parse(source).map_err(|e| e.error)?;
 
+        fn non_continuation(c: char) -> bool {
+            c.is_alphanumeric()
+                || Brackets::CLOSING_BRACKETS.contains(&c)
+                || Quotes::QUOTES.contains(&c)
+        }
+
         let mut stack = Vec::<Node>::new();
         let mut curr = Node::default();
         for lexeme in lexemes {
-            if lexeme.span.start.col == 0 {
+            if lexeme.span.start.col == 0 && curr.term.trim().ends_with(non_continuation) {
                 let term = source.span(lexeme.span);
                 let new_ident = term.len() - term.trim_start().len();
                 let node = Node { term, ident: new_ident, span: lexeme.span, children: vec![] };
