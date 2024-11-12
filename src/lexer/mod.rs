@@ -20,11 +20,50 @@
 // or implied. See the License for the specific language governing permissions and limitations under
 // the License.
 
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![cfg_attr(not(feature = "std"), no_std)]
+//! Lexer recognizes regular language of Parseltongue and creates token stream.
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-extern crate core;
+pub const DOC_COMMENT_DELIM: char = '-';
 
-pub mod lexer;
+pub struct Lexeme<'src> {
+    src: &'src str,
+    // TODO: Use Span and Loc
+    // span: Span,
+    begin: usize,
+    end: usize,
+}
+
+impl<'src> Deref for Lexeme<'src> {
+    type Target = &'src str;
+
+    fn deref(&self) -> &'src str {
+        self.src
+    }
+}
+
+pub enum Token<'src> {
+    Identifier(Lexeme<'src>),
+    Punct(Lexeme<'src>),
+    Attribute(AttrToken<'src>),
+    Comment(CommentToken<'src>),
+}
+
+pub struct AttrToken<'src> {
+    symbol: Lexeme<'src>,
+    ident: Lexeme<'src>,
+}
+
+pub struct CommentToken<'src> {
+    opening: Lexeme<'src>,
+    content: Lexeme<'src>,
+    closing: Option<Lexeme<'src>>,
+}
+
+impl<'src> CommentToken<'src> {
+    fn is_doc(&self) -> bool {
+        self.content.starts_with('-')
+    }
+    
+    fn is_multiline(&self) -> bool {
+        self.closing.is_some()
+    }
+}

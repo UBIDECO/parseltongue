@@ -27,16 +27,18 @@ All language *statements* span at least one or more lines and are either *declar
 *expressions*.
 
 Declarations have a form of `decl name: params`, followed by a body starting the newline with an
-increased indent, and lasting until the indentation is omitted. The parameters and the body of a
-declaration may be empty.
+increased indent, and lasting until the indentation is omitted. The parameters or the body of a
+declaration may be empty, however at least one of the must be present; if parameters are omitted,
+the ending double-colon must be omitted as well (i.e. `decl name:` with just body is invalid, since
+the body will be treated as parameters).
 
 Declaration verb, name, and colon `:` symbol must be always put on the same line. If the last
-non-whitespace symbol in a declaration line is comma (`,`), than it is assumed that the next
-non-empty line contains the continuation of the declaration parameters, no matter the indentation
-(indentation is omitted). Also, parser takes into account the use of brackets and quotes, and keep
-parsing lines as parameters as long as all brackets and quote counters are down to zero.
-Thus, parameters may span multiple lines, as long as each one of them is terminated with a comma,
-or there are non-closed brackets or quotes.
+non-whitespace symbol in a declaration line is a unicode punctuation (except quotation marks or a
+closing bracket), then it is assumed that the next non-empty line contains the continuation of the
+declaration parameters, no matter the indentation (indentation is omitted). Also, parser takes into
+account the use of brackets and quotes, and keep parsing lines as parameters as long as all brackets
+and quote counters are down to zero. Thus, parameters may span multiple lines, as long as each one
+of them is terminated with a comma, or there are non-closed brackets or quotes.
 
 Parseltongue parser recognizes the following types of brackets:
 
@@ -66,12 +68,13 @@ expression, unless there are non-closed brackets, quotes or a line ends with com
 
 List of languages made with Parseltongue (potentially incomplete):
 
-- [Vesper]: structured markup language to define schema-less data;
-- [Strict types]: declarative language for defining generalized algebraic data types;
-- [STON]: Strict-typed object notation;
-- [Cation]: functional general-purpose programming language made with category theory in mind;
-- [StingerJet]: language for defining deterministic Bitcoin wallet descriptors;
-- [Contractum]: language for writing smart contracts.
+- [Strict types]: declarative language for defining generalized algebraic data types, which includes
+    - [STON]: Strict-typed object notation;
+- [Vesper]: structured markup language (YAML, TOML and XML alternative), including its dialect
+    - [StingerJet]: language for defining deterministic Bitcoin wallet descriptors;
+- [Cation]: functional general-purpose programming language made with category theory in mind. It
+  is also used in other domain-specific languages, like
+    - [Contractum]: language for writing smart contracts.
 
 ## License
 
