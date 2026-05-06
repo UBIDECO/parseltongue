@@ -26,7 +26,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Display, Formatter};
 
-use crate::{
+use super::{
     Brackets, Cursor, Loc, Quotes, Source, Span, UnparsedSource, CLOSING_MULTILINE_COMMENT,
     OPENING_MULTILINE_COMMENT,
 };
@@ -459,7 +459,7 @@ mod test {
 
     #[test]
     fn multi_nested() {
-        const CODE: &str = include_str!("../test-data/multi_nested.ptg");
+        const CODE: &str = include_str!("../../test-data/multi_nested.ptg");
         test_blocks(
             &CODE.replace('\r', ""),
             [LexTy::Comment, LexTy::Code, LexTy::Quotes(Quotes::TripleBack)],

@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt::{self, Debug, Display, Formatter};
 
-use crate::LexerError;
+use super::LexerError;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct Loc {

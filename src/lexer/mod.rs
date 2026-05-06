@@ -20,11 +20,29 @@
 // or implied. See the License for the specific language governing permissions and limitations under
 // the License.
 
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![cfg_attr(not(feature = "std"), no_std)]
+//! Lexer recognizes regular language of Parseltongue and creates token stream.
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-extern crate core;
+pub struct Lexeme<'src> {
+    src: &'src str,
+    // TODO: Use Span and Loc
+    begin: usize,
+    end: usize,
+}
 
-pub mod lexer;
+pub enum Token<'src> {
+    Identifier(Lexeme<'src>),
+    Punct(Lexeme<'src>),
+    Attribute(AttrToken<'src>),
+    Comment(CommentToken<'src>),
+}
+
+pub struct AttrToken<'src> {
+    symbol: Lexeme<'src>,
+    ident: Lexeme<'src>,
+}
+
+pub struct CommentToken<'src> {
+    open: Lexeme<'src>,
+    content: Lexeme<'src>,
+    close: Option<Lexeme<'src>>,
+}

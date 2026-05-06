@@ -24,7 +24,7 @@
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 
-use crate::{Brackets, Lexeme, Lexer, LexerError, Quotes, Source, Span};
+use super::{Brackets, Lexeme, Lexer, LexerError, Quotes, Source, Span};
 
 #[derive(Clone, Default)]
 pub struct Node<'src> {

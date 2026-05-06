@@ -24,7 +24,7 @@
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Display, Formatter};
 
-use crate::{Ident, LexTy, Lexeme, Section, Source, Span};
+use super::{Ident, LexTy, Lexeme, Section, Source, Span};
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct Module<'src> {

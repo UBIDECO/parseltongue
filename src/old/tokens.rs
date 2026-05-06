@@ -22,7 +22,7 @@
 
 use core::fmt::{self, Debug, Display, Formatter};
 
-use crate::{Source, Span};
+use super::{Source, Span};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Ident<'src> {
