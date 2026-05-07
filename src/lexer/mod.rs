@@ -22,11 +22,22 @@
 
 //! Lexer recognizes regular language of Parseltongue and creates token stream.
 
+pub const DOC_COMMENT_DELIM: char = '-';
+
 pub struct Lexeme<'src> {
     src: &'src str,
     // TODO: Use Span and Loc
+    // span: Span,
     begin: usize,
     end: usize,
+}
+
+impl<'src> Deref for Lexeme<'src> {
+    type Target = &'src str;
+
+    fn deref(&self) -> &'src str {
+        self.src
+    }
 }
 
 pub enum Token<'src> {
@@ -42,7 +53,17 @@ pub struct AttrToken<'src> {
 }
 
 pub struct CommentToken<'src> {
-    open: Lexeme<'src>,
+    opening: Lexeme<'src>,
     content: Lexeme<'src>,
-    close: Option<Lexeme<'src>>,
+    closing: Option<Lexeme<'src>>,
+}
+
+impl<'src> CommentToken<'src> {
+    fn is_doc(&self) -> bool {
+        self.content.starts_with('-')
+    }
+    
+    fn is_multiline(&self) -> bool {
+        self.closing.is_some()
+    }
 }
